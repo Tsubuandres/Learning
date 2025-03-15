@@ -169,8 +169,8 @@
     {"role": "assistant", "content": "Yes, Azure OpenAI supports several languages, and can translate between them."},
     {"role": "user", "content": "Do other Azure AI Services support translation too?"}]}'
     ```
-  - Embeddings: <code>curl https://YOUR_ENDPOINT_NAME.openai.azure.com/openai/deployments/YOUR_DEPLOYMENT_NAME/<b>embeddings</b>?api-version=2022-12-01 \</code>
-  - Completion: <code>curl https://YOUR_ENDPOINT_NAME.openai.azure.com/openai/deployments/YOUR_DEPLOYMENT_NAME/chat/<b>completions</b>?api-version=2023-03-15-preview \</code>
+  - Embeddings: curl https://YOUR_ENDPOINT_NAME.openai.azure.com/openai/deployments/YOUR_DEPLOYMENT_NAME/<b>embeddings</b>?api-version=2022-12-01 \
+  - Completion: curl https://YOUR_ENDPOINT_NAME.openai.azure.com/openai/deployments/YOUR_DEPLOYMENT_NAME/chat/<b>completions</b>?api-version=2023-03-15-preview \
 - **Using SDKs**
   - You also the need the **api version** to create a client
     ```py
@@ -466,6 +466,127 @@
     }
    ```
 
+## Knowledge Store
+### Intro
+- Enrich data and populate index
+- Pipeline of AI skills
+- An index is a collection of JSON docs, but the data might be exported to other places
+- Knowledge store is defined in the skillset
+- Knowledge store is projections of enriched data
+### Define Projections
+- Shaper skill
+  - Used to simplify complex fields so that they can be used in JSON projections
+  - :thinking_face: fields in different hierarchies are put under the same field called `projection`
+  - Defined like this:
+    ```json
+    {
+      "@odata.type": "#Microsoft.Skills.Util.ShaperSkill",
+      "name": "define-projection",
+      "description": "Prepare projection fields",
+      "context": "/document",
+      "inputs": [
+        {
+          "name": "file_name",
+          "source": "/document/metadata_content_name"
+        },
+        {
+          "name": "url",
+          "source": "/document/url"
+        },
+        {
+          "name": "sentiment",
+          "source": "/document/sentimentScore"
+        },
+        {
+          "name": "key_phrases",
+          "source": null,
+          "sourceContext": "/document/merged_content/keyphrases/*",
+          "inputs": [
+            {
+              "name": "phrase",
+              "source": "/document/merged_content/keyphrases/*"
+            }
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "targetName": "projection"
+        }
+      ]
+    }
+
+    ```
+  - Creates this output:
+    ```json
+    {
+        "file_name": "file_name.pdf",
+        "url": "https://<storage_path>/file_name.pdf",
+        "sentiment": 1.0,
+        "key_phrases": [
+            {
+                "phrase": "first key phrase"
+            },
+            {
+                "phrase": "second key phrase"
+            },
+            {
+                "phrase": "third key phrase"
+            },
+            ...
+        ]
+    }
+    ```
+### Define Knowledge Store
+- Must create `knowledgeStore` object in skillset
+  - Must contain connection string to storage account
+  - Must contain definition of projections
+    - Can define these projections: object, table, file
+    - !! Only one projection per type
+    ```json
+    "knowledgeStore": { 
+          "storageConnectionString": "<storage_connection_string>", 
+          "projections": [
+            {
+                "objects": [
+                    {
+                    "storageContainer": "<container>",
+                    "source": "/projection"
+                    }
+                ],
+                "tables": [],
+                "files": []
+            },
+            {
+                "objects": [],
+                "tables": [
+                    {
+                    "tableName": "KeyPhrases",
+                    "generatedKeyName": "keyphrase_id", ## field where the key of each record will be created
+                    "source": "projection/key_phrases/*", ## the fields to populate in the table
+                    },
+                    {
+                    "tableName": "docs",
+                    "generatedKeyName": "document_id", 
+                    "source": "/projection" 
+                    }
+                ],
+                "files": []
+            },
+            {
+                "objects": [],
+                "tables": [],
+                "files": [
+                    {
+                    "storageContainer": "<container>",
+                    "source": "/document/normalized_images/*"
+                    }
+                ]
+            }
+        ]
+    }
+    ```
 
 
 - Where do I find list of AI Search Skills? 
