@@ -588,8 +588,881 @@
     }
     ```
 
+## Advanced Search
+- Complex Lucene searchs with **full text search**
+### Term boosting
+- Example of simple search : `search=luxury&$select=HotelId, HotelName, Category, Tags, Description&$count=true`
+  - There is no lexical analysis
+  - The search service thinks that all terms in the search *must* be included in the result
+- Query Parser
+  - To use: add `&queryType=full`
+    - Features
+      - boolean operators
+      - fielded search: search in a specific field
+      - Fuzzy search
+      - term proximity
+      - regex
+      - wildcards `*`, `?`
+      - precedence grouping
+      - term boosting
+### Scoring profiles
+- Azure ranks result docs using the BM25 algorithm
+  - Factors:
+    - number of times the term appears in the doc
+    - doc size
+    - rarity of each term
+- You can boost specific fields with weights and functions
+  - Functions:
+    - Magnitude
+    - Freshness
+    - Distance
+    - Tag
+- How to create
+  - Indexes >> scoring profile >> Add scoring profile
+  - add a weight to specific field name
+- You can set a scoring profile as the default
+  - Otherwise you can also define which profile to use in the search with `&scoringProfile=PROFILE NAME`
+### Analyzers and Tokenized Items
+- Text from docs need processing when making the index. Ex:
+  - text should be broken into words
+  - function words should be removed
+  - words reduced to root form 
+- The processing is done by **analyzers**
+  - 2 built-in types
+    - Language: 
+    - Specialized: language-agnostic. Used for eg.: zip codes or product IDs
+      - `PatternAnalyzer` to use regexp
+- Custom analyzers
+  - consists of:
+    - character filters: process a string
+      - html_strip
+      - mapping
+      - pattern_replace
+    - tokenizers: divide the text into tokens
+    - token filter: remove or modify tokens
+  - List of tokenizers and token filters
+    - [AI Search >> How-to >> Keyword search >> Analyzers >> Add a custom analyzier](https://learn.microsoft.com/en-us/azure/search/index-add-custom-analyzers)  
+- **Create Custom Analizer**
+  - odata.type: `Microsoft.Azure.Search.CustomAnalyzer`
+  - can only set 1 tokenizer, but various character and token filters
+  - Testing: use REST API `Analyze Text` function
+- Using the Analyzer
+  - Define `indexAnalyzer` of `searchAnalyzer` in each field object.
+
+### Include multiple languages in Index
+- Add lang specific fields
+  - Duplicate any fields that you want to offer in other languages
+  - Add the appropriate Analyzer to that field for the specific lang
+- You can limit the languages using in the rearch like so
+  - use `$searchFields`
+  - <code>search='parfait pour se divertir'&$select=listingId, description_fr, city, region, tags&<b>$searchFields=tags, description_fr</b>&queryType=full</code>
+- Enrich with new translations
+  - Add new translations with skills: `#Microsoft.Skills.Text.TranslationSkill`
+  - Add field → add skill → update indexer to map output into index
+    ```json
+    "outputFieldMappings": [
+      {
+        "sourceFieldName": "/document/description/description_jp",
+        "targetFieldName": "description_jp"
+      },
+      {
+        "sourceFieldName": "/document/description/description_uk",
+        "targetFieldName": "description_uk"
+      }
+    ]
+    ```
+### Order results by distance
+- Geospatial funcs: 
+  - `geo.distance`: returns distance in a straight line
+  - `geo.intersects`: `true` if location is inside defined polygon
+ - !! Locationf fields need be data type `Edm.GeographyPoint`
+
+### Extra Info
+- Character used to boost search term: `^`
+- `Tag` is a func that can be used in a scoring profile
+
+## Azure Data Factory
+- ADF is zero-code
+- ADF has connectors to 100 data stores
+- Use REST or HTTP
+- data stores can be used as sources or data sinks
+- Index can be used as sink
+  - source → ADF pipeline → index
+- Index as a sink only supports these fields
+  - str
+  - int32
+  - int64
+  - double
+  - boolean
+  - DataTimeOffset
+### Push API
+- You can push data to your index 
+- Features that can be manipulated with get, put, post, delete
+  - index
+  - doc
+  - indexer
+  - skillset
+  - synonym map
+- API requirements
+  - API version in URL
+  - key in header
+  - your endpoint
+- Eg. add data to index
+  ```console
+  POST https://[service name].search.windows.net/indexes/[index name]/docs/index?api-version=[api-version]
+
+  ```
+  - The body should include the action, which doc, and the data
+  ```json
+    {  
+      "value": [  
+        {  
+          "@search.action": "upload (default) | merge | mergeOrUpload | delete",  
+          "key_field_name": "unique_key_of_document", (key/value pair for key field from index schema)  
+          "field_name": field_value (key/value pairs matching index schema)  
+            ...  
+        },  
+        ...  
+      ]  
+    }
+  ```
+- Pushing too much data at the same time can yield a 503 error. Here are some ways to handle that:
+  - Backoff
+  - Threads
+
+## Mantain AI Search
+### Security
+- 3 areas
+  - Inbound search requests 
+  - Outbound requests from solution to servers to index docs
+  - Restrict access to docs
+- Encription
+  - Intransit data is encrypted with HTTPS TLS 1.3 encryption over port 443.
+  - You can choose to use your own encryption keys with Key Vault
+    - This enables **double encryption**
+- Inbound traffic
+  - Use **firewall** so that only your app can access the Search solution
+  - **Most effective**: use private endpoint
+- Authenticate requests
+  - Use keys
+    - Admin keys: write permissions and query sys info
+    - Query: read permissions and query indeces
+- RBAC
+  - owner: all
+  - contributor: all but cant change roles or assign
+  - reader
+- Outbound traffic
+  - When Search solution inports data from data sources
+  - Methods:
+    - Key based auth
+    - database logins
+    - MS Entra logins
+    - Firewall
+    - Shared private link between services
+      - Basic tier or S2
+- Secure documents
+  - Add security field 
+   - use `search.in` filter
+   ```json
+    {
+      "filter":"security_field/any(g:search.in(g, 'user_id1, group_id1, group_id2'))"  
+    }
+   ```
+### Performance
+- Measure performance
+  - Use log analytics
+  - capture diagnostics at search service level 
+- Check for throttling
+  - users will see a 503
+  - indeces will see a 207
+- Check specific queries
+  - With postman or something
+  - See the **elapsed-time** in the response
+- Optimize index
+  - Get rid of docs
+  - review schema
+    - delete skills
+    - make some fields not searchable
+  - scale up or scale out
+- Optimize queries
+  - Specify search fields
+  - specify return fields
+  - avoid partial search (regex etc.)
+  - avoid high skip values
+  - use search funcs and not individual terms
+- Choosing tiers
+  - [Documentation](https://learn.microsoft.com/en-us/training/modules/maintain-azure-cognitive-search-solution/03-optimize-performance-of-azure-cognitive-search-solution)
+### Costs
+- Tips
+  - Minimize bandwith by using a few regions as possible
+  - Scale up for indexing then down for querying
+  - Keep search requests within datacenter using web apps
+  - enable enrichment catching
+### Reliability
+- Make it highly available
+  - Make replicas
+    - two replicas gives you 99.9 for query
+    - three reps gives you 99.9 for query and indexing
+- Use different availability zone
+- Distribute globally
+- Back up indexes as json files
+
+### Extra info
+- Default metrics: Search latency, queries per second, and the percentage of throttled queries.
+- Best way to manage service costs: Monitor and set budget alerts for all your search resources.
+
+## Semantic Ranking
+- Capability to use Language Understanding to get the context and improve ranking
+- Default search ranking is BM25
+- Semantic ranking does two things
+  - Improves ranking through LU
+  - Adds captions and answers
+- How it works
+  1. Take top 50 results
+  2. Results are split into fields as per config
+  3. Fields converted to tokens of 256
+  4. Token strings are passed to a LU process that ranks them 
+  5. Output the semantic relevance
+- Semantic ranking can only ranked documents originally outputted by BM25
+- Only uses top 50
+- Up to 1000 queries are free. Otherwise choose standard pricing
 
 - Where do I find list of AI Search Skills? 
+
+### Set it up
+- Need to have at least one index
+- Not available in all regions
+- Resources >> Search Service >> Semantic ranker
+- Set per-index basis 
+- Can have multiple configs on an index
+
+### Extrainfo
+- Prerequisites for using semantic ranking: Azure AI Search service with a billable tier.
+
+## Vector search
+- index, store and retrieve vercotr embedding from index
+- Used to power:
+  - Rag
+  - Similarity searches
+  - multi-modal searches
+  - recommendation engines
+- Usage scenarios
+  - Use LLM models to encode text and use queries encoded as vectors to retrieve docs
+  - Similarity search across different types of media
+  - Represent docs in diff languages with multi-lingual embedded model
+  - Hybrid text and vector search
+  - Apply filters to text and num fields
+  - Create a vector database to use as knowledge base etc. 
+- Limitations:
+  - Embeddings must be provided by **Azure OpenAI**, because AI Search does not generate them
+  - Customer Managed Keys are not supported
+  - There are storage limitations
+    - If docs are too large, consider chunking. 
+
+### Prepare the search
+1. Send AI Search query to an embedded model
+  - the model's response is then sent to a search engine
+2. Check if index has vector field
+  - run empty search 
+  - check field `vectorSearch` with type `Collection(Edm.single)`
+3. turn text query into vector
+
+### Extra info
+- Some embedding model types
+  - Similarity: semantic similarity between texts
+  - Text: relevance of docs
+  - Code
+- Embedding space: where vectors live.
+- Q&A
+  - What do you need to run a successful vector query? 
+    - a search service URL and admin key
+    - 
+
+# Document Intelligence
+## 101
+- DocIntel outputs data in JSON
+- 3 prebuilt models for general analysis:
+  - Read
+  - General doc
+  - Layout
+- 6 prebuilt models for spec type of doc
+  - Invoice
+  - Receipt
+  - US tax declaration
+  - ID doc
+    - only bio pages of passports are supported
+  - Business card
+  - Health insurance card
+- Otherwise use custom models
+- Composed model: use multiple custome models in one solution
+- DocIntel is more sophisticated than Azure AI Vision
+  - AI Vision OCR will still need that you code some type of analysis process
+### Resources
+- Add Azure AI DocIntell resource
+  - Free
+    - not available for multi-service resource
+  - Standard S0
+### Choosing models
+- General prebuild
+  - Read
+    - extract words and lines
+    - printed or handwritten
+    - detects lang
+    - use `pages` to set the range of a pdf to be analyzed
+  - General doc
+    - Extract **key-value pairs**
+    - **Entity extraction**. The only one that provides this!!!
+  - Layout
+    - Extract text, tables, and structure information
+    - Good for getting info about the structure 
+    - get selection marks to with bounding boxes
+- Custom models
+  - must provide **at least 5** examples
+  - 2 types
+    - Template models:
+      - forms have a consistent visual template
+      - 9 langs
+      - also handwritten support
+    - Neural:
+      - More varied structures
+      - Only major langs
+- Composed model
+  - DocIntell will automatically classify the form and apply the appropriate model
+  - results of composed model include `docType` property, which tells you what model was used
+
+- NO WORD Docs!!
+
+## Extracting Data
+- Requirements
+  - JPG, PNG, BMP, PDF or TIFF
+  - [Documentation](https://learn.microsoft.com/en-us/training/modules/work-form-recognizer/3-get-started)
+### Train custom models
+- you need the form docs and JSON docs that contain the labeled fields
+- You can store in blob containers
+- Docs you need
+  - original form
+  - .ocr.json: from *analyze doc* function
+  - .labels.json: labeled fields with mapping
+  - .fields.json: describing fields you want to extract
+- Things to do
+  - Put docs in container
+  - Generate shared access security URL for container
+  - Build model REST API func
+  - Get model REST API to get id 
+
+# AI Language
+ - Service list
+  - lang detec
+  - key phrase extract
+  - sentiment
+  - named entity recog
+  - entitity linking
+- Basic JSON request format
+  ```json
+        {
+        "kind": "EntityRecognition",
+        "parameters": {
+            "modelVersion": "latest"
+        },
+        "analysisInput": {
+            "documents": [
+            {
+                ...
+            }
+            ]
+        }
+        }
+  ```
+### Detect Language
+- **!! Docs must be under 5120 charac**
+- **!! collection must be under 1000 items**
+- Lang detected response.
+  ```json
+    {   "kind": "LanguageDetectionResults",
+        "results": {
+            "documents": [
+            {
+                "detectedLanguage": {
+                "confidenceScore": 1,
+                "iso6391Name": "en",
+                "name": "English"
+                },
+                "id": "1",
+                "warnings": []
+            },
+  ```
+- If you pass a doc with multiple langs, the model returns the **prominent lang**
+- If the parses can't understand the language both ISO and name are `unknown`. Confidence is `0`
+### Extract Key Phrases
+- **!! Docs must be under 5120 charac**
+- Example response
+  ```json
+    "documents": [  
+            {
+            "id": "1",
+            "keyPhrases": [
+            "change",
+            "world"
+            ],
+            "warnings": []
+        },
+  ```
+### Sentiment
+- Includes:
+  - overall assesment of the doc
+  - assesment for each sentence
+- Confidence scores for three categories: positive, negative and neutral.
+- How to calculate overall assesment
+  - neutral = neutral
+  - positive + neutral = positive
+  - negative + neutral = negative
+  - negative + positive = mixed
+### Entities (NER)
+- List of available types
+  - Person
+  - Location
+  - DateTime
+  - Organization
+  - Address
+  - Email
+  - URL
+  - ※List documntation [Ai Lang >> Azure AI Lang capabilities >> NER >> Prebuilt >> concepts >> recognized entitiy categories](https://learn.microsoft.com/en-us/azure/ai-services/language-service/named-entity-recognition/concepts/named-entity-categories?tabs=ga-api)
+- **!! Must provide language in the request**
+- Response
+  ```json
+    {
+    "kind": "EntityRecognition",
+    "parameters": {
+        "modelVersion": "latest"
+    },
+    "analysisInput": {
+        "documents": [
+        {
+            "id": "1",
+            "language": "en",
+            "text": "Joe went to London on Saturday"
+        }
+        ]
+    }
+    }
+  ```
+## Question Answering
+- Azure AI Language has a "QA" capability
+- You define a **knowledge base**
+  - Can be queried by language
+  - Published to REST enpoint
+  - bots and apps use the endpoint
+  - Examples of sources
+    - Website containing FAQs
+    - Files containing structured text (brochures)
+    - built-in **question answer pairs**
+- New versionn of QnA maker
+
+### Compare QA and LU
+||QA|LU|
+|--|--|--|
+|場面|user ask question, wants answer|submit utterance, want appropriate response|
+|query processing|Use NLU to match q with a|Use NLU to interpret intent and match entity|
+|Response|static|indicates most likely intent and entitiy|
+|client logic|client logic present a|client app takes action based on the intent presented|
+
+### Create Knowledge Base
+- Turn on **question answering** in your Language Service resource
+- Create or select Azure AI Search resource
+- Lang Studio: create Custom Question Answering project
+
+### Multi-turn conversation
+- You can do this
+- Define followup questions
+
+### Train and Test
+- Train the language model
+- Test and check the
+  - answers
+  - confidence scores
+  - other potential answers
+
+### Consume Knowlege Base with API
+- Use this request body
+  ```json
+    {
+        "question": "What do I need to do to cancel a reservation?",
+        "top": 2, ## max number of answers
+        "scoreThreshold": 20, ## return answers >= to this num
+        "strictFilters": [  ## limit to anwers that contain this metadata
+            {
+            "name": "category",
+            "value": "api"
+            }
+        ]
+    }
+  ```
+### Improve QA performance
+- **Active learning**
+  - Enabled by default
+  - Offers alternate qs for your qa pairs ("Review suggestions" pane)
+  - You can reject or accept suggestions
+- Synonyms
+  - Define them with rest
+  ```json
+  {
+        "synonyms": [
+            {
+                "alterations": [
+                    "reservation",
+                    "booking"
+                    ]
+            }
+        ]
+    }
+  ```
+## Conversational Language Model
+### Intro
+- Natural Language Processing ＞＞　Natural Language Understanding
+- Common flow
+  - app takes Natlang
+  - lang model determines intent
+  - app uses intent to perform action
+### Prebuilt Capabilities
+- 2 categories
+  - Pre-config
+    - Summarization
+      - for docs
+      - for conversations
+    - Named Entity Recognition
+      - extract proper nouns
+    - PII detection
+      - identify, categorize and redact 
+    - Key Phrase Extract
+      - main concepts from a text
+    - Sentiment Analysis
+    - Lang Detection 
+  - Learned
+    - CLU
+      - predict intent and extract important entities
+      - data must be tagged
+    - Custom named entity recog
+      - extract specified entities from unstructured text
+    - Custom text classi
+      - Classify you text into groups you define
+    - Question Answering
+### Resources to build CLU model
+- Create CLU resource to build model and use model after deploy
+  - Create under **Language Service**
+- You can use **language studio**
+- Use REST
+  - use this header for key：`Ocp-Apim-Subscription-Key`
+  - Request deploy: `{ENDPOINT}/language/authoring/analyze-conversations/projects/{PROJECT-NAME}/deployments/{DEPLOYMENT-NAME}?api-version={API-VERSION}`
+    - as a body it nees the `trainedModelLabel` param. This will be the name of the deployment
+  - With `GET` you can get the deployment status. Use `/jobs/` and provide the job id: `{ENDPOINT}/language/authoring/analyze-conversations/projects/{PROJECT-NAME}/deployments/{DEPLOYMENT-NAME}/jobs/{JOB-ID}?api-version={API-VERSION}`
+- **!! for buitl in features use the `analyze-text` enpoint**
+  - then in the body, define the feature you want to use in the `kind` param
+  ```json
+  {
+      "kind": "LanguageDetection",
+      "parameters": {
+          "modelVersion": "latest"
+      },
+      "analysisInput":{
+          "documents":[
+              {
+                  "id":"1",
+                  "text": "This is a document written in English."
+              }
+          ]
+      }
+  }
+  ```
+### Define intents, utterances, and entities
+- By defining these 3 you create a model
+- Identify all the intents your users might have
+- Identify all the utterances and their synonymic expression that the users might use
+- Labeling best practice
+  - label precisely
+  - label consintently 
+  - label completely
+- Entity types
+  - Learned
+  - List
+  - Prebuilt
+- For each intent provide different example of what might be said, so that the model can understand a variaty of stuff
+- There are prebuilt components for entities. 
+  - Eg., nums, emails, URL, choices
+## Text classification solutions
+- It is **custom**
+- 2 types
+  - single label classification
+  - multiple label classification 
+    - when labelling, data must remain clear and a good distribution must be provided 
+- Metrics used
+  - Recall: of all labels, how many were identified
+  - precision: how many of the predicted labels are correct
+  - f1 score: a function of recall and precision
+- API
+### How to build
+- Build in Lang Studio or through api 
+- Life cycle
+  1. Define labels
+  2. Tag data
+  3. train model
+  4. view model: model is scored between 0 and 1
+  5. improve model 
+  6. deploy
+  7. classify
+- Data split
+  - automatic or manual
+  - automatic: for large datasets, consistent data or well distributed data for all classes
+- Deployment options
+  - in one project you can have multiple models and deployments
+  - each has its own name 
+  - **!! each project has a limit of 10 names**
+- Choose deployment model like so: 
+  ```json
+  <...>
+    "tasks": [
+      {
+        "kind": "CustomSingleLabelClassification",
+        "taskName": "MyTaskName",
+        "parameters": {
+          "projectName": "MyProject",
+          "deploymentName": "MyDeployment"
+        }
+      }
+    ]
+  <...>
+  ```
+- REST API
+  - key: `Ocp-Apim-Subscription-Key` param
+  - train: `<YOUR-ENDPOINT>/language/analyze-text/projects/<PROJECT-NAME>/:train?api-version=<API-VERSION>`
+    ```json
+    {
+        "modelLabel": "<MODEL-NAME>",
+        "trainingConfigVersion": "<CONFIG-VERSION>", ##model version you wanna train
+        "evaluationOptions": {
+            "kind": "percentage",
+            "trainingSplitPercentage": 80,
+            "testingSplitPercentage": 20
+        }
+    }
+    ```
+  - consume model
+  ```json
+  {
+    "displayName": "Classifying documents",
+    "analysisInput": {
+      "documents": [
+        {
+          "id": "1",
+          "language": "<LANGUAGE-CODE>",
+          "text": "Text1"
+        },
+        {
+          "id": "2",
+          "language": "<LANGUAGE-CODE>",
+          "text": "Text2"
+        }
+      ]
+    },
+    "tasks": [
+      {
+        "kind": "<TASK-REQUIRED>", ##This is the part to remember
+        "taskName": "<TASK-NAME>",
+        "parameters": {
+          "projectName": "<PROJECT-NAME>",
+          "deploymentName": "<DEPLOYMENT-NAME>"
+        }
+      }
+    ]
+  }
+  ```
+- kind is `CustomMultiLabelClassification` or single
+
+- How to see results of classification task: **Call the URL provided in the header of the qureqest response   **
+ ## Custom Named Entity Recognition (Custom NER)
+### Intro
+- Custom vs Builtin NER
+  - Builtin
+    - person, location, organization, URL
+    - Documentation for all types: [Azure AI Language >> Azure AI Language Capabilities >> Name entitity recognition >> Prebuilt >> Concepts >> Recognized entitity categories](https://learn.microsoft.com/en-us/azure/ai-services/language-service/named-entity-recognition/concepts/named-entity-categories?azure-portal=true&tabs=ga-api)
+    - API: `<YOUR-ENDPOINT>/language/analyze-text/jobs?api-version=<API-VERSION>`
+- Lifecycle
+  - Define entities
+  - Tag data
+  - Train model
+  - View moel
+  - Improve model
+  - Deploy
+  - Extract entities
+- How to get high quality data
+  - Diversity
+  - Distribution
+  - Accuracy: data that is close to the real world  
+- Avoid ambiguous entities
+- Keep entities distinct and avoid 
+- To request a task, use: ` "kind": "CustomEntityRecognition",`
+### Project Limits
+[Documentation: Azure AI Language >> Overview >> Quotas and Limits](https://learn.microsoft.com/en-us/azure/ai-services/language-service/concepts/data-limits)
+- Restrictions:
+  - Training - at least 10 files, and not more than 100,000
+  - Deployments - 10 deployment names per project
+  - APIs
+    - Authoring - this API creates a project, trains, and deploys your model. Limited to 10 POST and 100 GET per minute
+    - Analyze - this API does the work of actually extracting the entities; it requests a task and retrieves the results. Limited to 20 GET or POST
+  - Projects - only 1 storage account per project, 500 projects per resource, and 50 trained models per project
+  - Entities - each entity can be up to 500 characters. You can have up to 200 entity types.
+### Labeling Data
+- Three factors
+  - Consistency
+  - Precision
+  - Completeness
+- You can also import labeled data with the API
+  - **!! Info in the MS Learn path**
+### Train and evaluate
+- Use precision, recall and F1
+- Interpretation
+  - Recall↑ + Precision↓ = model correctly identifies entities but can't label them correctly. 
+  - Recall↓ + Precision↑ = model correctly labels entities but is not good at finding them.
+- Confusion matrix
+  - A detailed view of how each labeled performed
+
+### Extra Info
+- Where is labeled data stored??
+  - In a JSON filed kept in the Storage account for the project
+  - filedn JSON 'k'eft Accountn storage projenkt
+
+## Azure AI Translation Resource
+- Three main features
+  1. Language detection
+  2. One-to-many translation
+  3. Script transliteration
+- 専用resouce or multi resource
+  - **use Text Analytics API**
+### Examples of the services
+- **Detect Lang**
+  - Bash example: `curl -X POST "https://api.cognitive.microsofttranslator.com/detect?api-version=3.0" -H "Ocp-Apim-Subscription-Region: <your-service-region>" -H "Ocp-Apim-Subscription-Key: <your-key>" -H "Content-Type: application/json" -d "[{ 'Text' : 'こんにちは' }]`
+  - The service returns the language in ISO format  
+    ```json
+    [
+      {
+        "language": "ja",
+        "score": 1.0,
+        "isTranslationSupported": true,
+        "isTransliterationSupported": true
+        
+        
+      }
+    ]
+    ```
+- **Translate**
+  - In the URL, specify `to` and `from` langs. 
+  - There can be multiple `to` langs  
+  - `curl -X POST "https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&from=ja&to=fr&to=en" -H "Ocp-Apim-Subscription-Key: <your-key>" -H "Ocp-Apim-Subscription-Region: <your-service-region>" -H "Content-Type: application/json; charset=UTF-8" -d "[{ 'Text' : 'こんにちは' }]"`
+  
+- **Transliteration**
+  - In the URL, specify `toScript` and `fromScript` langs. 
+  - There can be multiple `toScript` langs  
+  - `curl -X POST "https://api.cognitive.microsofttranslator.com/transliterate?api-version=3.0&fromScript=Jpan&toScript=Latn" -H "Ocp-Apim-Subscription-Key: <your-key>" -H "Ocp-Apim-Subscription-Region: <your-service-region>" -H "Content-Type: application/json" -d "[{ 'Text' : 'こんにちは' }]"`
+  ### Translation Option
+  - Word alignment: what source words correspond to what translated words
+    - To use: set **includeAlignment** to `true`
+    - You get the alignment like so:
+    ```json
+    [
+      {
+          "translations":[
+            {
+                "text":"智能服务",
+                "to":"zh-Hans",
+                "alignment":{
+                  "proj":"0:4-0:1 6:13-2:3"
+                }
+            }
+          ]
+      }
+    ]
+    ```
+- Sentence length
+  - set **includeSentenceLength** parameter to `true`
+  - You get:
+  ```json
+      "translations":[
+         {
+            "text":"Salut tout le monde",
+            "to":"fr",
+            "sentLen":{"srcSentLen":[12],"transSentLen":[20]}
+         }
+      ]
+  ```
+- Profanity filter
+  - param is **profanityAction**
+  - Set to:
+    - `noAction`
+    - `deleted`
+    - `marked`: asterisks
+
+- **Options Documentation:** [Azure AI Translator >> Text Translation >> Reference >> Translate](https://learn.microsoft.com/en-us/azure/ai-services/translator/text-translation/reference/v3/translate)
+
+### Costum Translation
+- For orgs with specific vocab
+- Use Custom Translator portal
+  1. Create workspace
+  2. Create project
+  3. Upload training data files
+  4. Train model
+  5. Test
+  6. Publish
+- Request a translation: `https://api.cognitive.microsofttranslator.com/translate?api-version=3.0`
+
+## Azure AI Speech
+- Services
+  1. Text ⇔ Speech
+  2. Text ⇔ Speech
+  3. Speech translation
+  4. Speaker Recognition
+  5. Intent Recognition
+### Speech to Text API
+- 2 APIs
+  1. Speech to Text API
+  2. Speech to Text Short Audio: up to **60** secs
+- SDK configs
+  - "SpeechConfig": Info to connect to resource
+  - "AudioConfig": Source to audio. Mic or file
+  - "SpeechRecognizer" object: Created from the two above
+  - Use method `RecognizeOnceAsync`
+  - The result object: `SpeechRecognitionResult`
+    - duration
+    - OffsetInTicks
+    - properties
+    - Reason 
+    - ResultID
+    - Text
+  - Examples fo Result: `NoMatch`, `Canceled` 
+    - Should check `CancellationReason`
+### Text to Speech API
+- 2 APIs
+  - Text to Speech: the normal one
+  - Batch Synthesis: large volumes of audio
+- SDK configs
+  - "SpeechConfig": Info to connect to resource
+  - "AudioConfig": Source to audio. Mic or file
+  - "SpeechSynthesizer" object: Created from the two above
+  - Use method `SpeechTextAsync`
+  - The result object: `SpeechSynthesisResult`
+    - Audiodata
+    - properties
+    - Reason 
+    - ResultID
+  - When success: Reason is `SynthesizingAudioCompleted `
+### Other info
+- Audio format can be set by `SpeechSynthesisOutputFormat `
+  - Eg: `speechConfig.SetSpeechSynthesisOutputFormat(SpeechSynthesisOutputFormat.Riff24Khz16BitMonoPcm);`
+- Voices can be set by `SpeechSynthesisVoiceName`
+  - Eg: `speechConfig.SpeechSynthesisVoiceName = "en-GB-George";`
+- How to use SSML : `speechSynthesizer.SpeakSsmlAsync(ssml_string);`
+
+
+
+
 
 
 
