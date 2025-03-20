@@ -948,7 +948,91 @@
   - Put docs in container
   - Generate shared access security URL for container
   - Build model REST API func
-  - Get model REST API to get id 
+  - Get model REST API to get id
+- Alternatively, you can use the Azure Document Intelligence studio
+  - 2 types
+    - **custom template models**
+      - When your forms are consisten!!
+      - very fast, just a few min
+      - accurately extract various types of data, text, tables, key-value pairs, etc.
+      - available for **+100 lang**
+    - **custom neural models** 
+      - deep learned models
+      - good for semi or unstructured data!!
+### Use API
+- to use API: use the `analyze document` function of either REST or SDK  
+  ```py
+  endpoint = "YOUR_DOC_INTELLIGENCE_ENDPOINT"
+  key = "YOUR_DOC_INTELLIGENCE_KEY"
+
+  model_id = "YOUR_CUSTOM_BUILT_MODEL_ID"
+  formUrl = "YOUR_DOCUMENT"
+
+  document_analysis_client = DocumentAnalysisClient(
+      endpoint=endpoint, credential=AzureKeyCredential(key)
+  )
+
+  # Make sure your document's type is included in the list of document types the custom model can analyze
+  task = document_analysis_client.begin_analyze_document_from_url(model_id, formUrl)
+  result = task.result()
+  ```
+- succesful response contains `analyzeResult`
+  - is an array of pages and their conten
+- **improve confidence scores**
+  - use better quality docs
+  - if form appearance varies from doc to doc, consider making different models for each appearance. 
+  - for low-risk apps, maybe 80% is okay. 
+  - high risk, please use 100%
+### Document Intelligence Studio
+- Available projects
+  - Document Analysis Models
+    - Read: extract print or hand text. detect lang from text and img.
+    - Layout: extract tables, text, and **structure information**
+    - General Docs: key-value pairs, selection marks, and entities
+  - Prebuilt models
+  - Custom models 
+- **How to create custom model**
+  - Create Doc Intel resource or AI Services Resource
+  - Use at least **5 or 6** samples for training
+  - Confire **cross-domain resources** to store labeled data
+  - Create project
+    - provide storage container
+  - Apply labels
+  - Train model
+  - Get Model ID
+  - Test
+## Create Composed Model
+- Combine you costum models and publish as single service
+- Used when there are multiple versions of a form
+- Send documents to a single location, without you or the user having to sort what type it is. 
+### How to
+- Use `StartCreateComposedModelAsync()` in **custom code**
+- Provide the Model ID of the Composed model
+- In result, `docType` tells you what model was used for analysis
+### Limits
+- Free tier
+  - Custom Template: 500
+  - Custom Neural: 100
+  - Composed: 5
+- Standard s0
+  - Custom Template: 5000
+  - Custom Neural: 500
+  - Composed: 200
+- Neural and Custom Template cannot be mixed
+- Custom Templat with Custom Template can be composed acrouss API 3.0 and 2.1
+### Assemble a composed model
+- You need
+  - Azure AI Document Intelligence resource
+  - Set of custom models
+- With SDK
+  - create object `DocumentModelAdministrationClient`
+    - Needs endpoint and key
+  - Create list with all the model IDs
+  - Pas list to `StartCreateComposedModelAsync()`
+### More Info
+- You're trying to create a composed model but you're receiving an error. Which of the following should you check?
+  - That the custom models were trained with labels.
+
 
 # AI Language
  - Service list
@@ -1460,11 +1544,40 @@
   - Eg: `speechConfig.SpeechSynthesisVoiceName = "en-GB-George";`
 - How to use SSML : `speechSynthesizer.SpeakSsmlAsync(ssml_string);`
 
+## Azure AI Speech service: Translate speech
+### Provision the service
+- Use AI Speech Resource or Multi-service Resource
+- What you need for SDK or API
+  - location (eg: eastus)
+  - key
+### Seting up object to use SDK
+- SpeechTranslationConfig: info about connection
+  - location
+  - key
+  - source lang
+  - target lang
+- AudioConfig: audio source
+  - microphone or audiophile
+- TranslationRecognizer: created with SpeechTranslationConfig and AudioConfig
+  - Methods
+    - RecognizeOnceAsync: translate **single** utterance
+- Response keys:
+  - Duration
+  - OffsetInTicks
+  - Properties
+  - Reason: `RecognizedSpeech`
+  - ResultId
+  - Text: transcript of source lang
+  - Translation: dic of translations
 
-
-
-
-
-
-
-
+### Synthesize Translations
+2 Types
+- Event-based
+  - 1:1 translation
+  - speech is captured as audio stream
+  - Config
+    - TranslationConfig: here set voice
+    - TranslationRecognizer: get event handler for **"Synthesizing"** event.
+    - Result: use method GetAudio() to retreave byte stream of audio
+- Manual
+  - Iterate through translations with **SpeechSynthsizer**　object
