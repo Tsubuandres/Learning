@@ -1035,7 +1035,7 @@
 
 
 # AI Language
- - Service list
+- Service list
   - lang detec
   - key phrase extract
   - sentiment
@@ -1581,3 +1581,153 @@
     - Result: use method GetAudio() to retreave byte stream of audio
 - Manual
   - Iterate through translations with **SpeechSynthsizer**　object
+
+# Azure AI Vision
+### Analyze Images
+Provision AI Vision Resource
+- Features
+  - Description and tag generation
+  - Object detection
+  - People detection
+  - Image analysis: metadata, color, type
+  - Category identification: also "does it contain any landmarks?"
+  - Background removal
+  - Moderation rating
+  - OCR
+  - Thumbnail generation
+### How to Analyze and Image
+- !! Detecting celebrities needs a **limited access policy**
+- API
+  - Create `ImageAnalysisClient` object: give credentials and endpoint
+  - request analysis through the object's `VisualFeatures` property
+  ```py
+  result = client.analyze(
+      image_url="<url>",
+      visual_features=[VisualFeatures.CAPTION, VisualFeatures.READ],
+      gender_neutral_caption=True,
+      language="en",
+  )
+  ```
+  - list of `visual_features`
+    1. Tags
+    2. objects
+    3. captions
+    4. dense_captions: more detailed
+    5. people
+    6. smart_crops: bounding box
+    7. read: ocr
+  - the result usually contains a confidence score and bounding box
+### Thumnail creation and background removal
+- Azure can determine the **region of interest** of an image
+- This is used for thumnbnails
+  - You can choose cropping rations from **0.75 ～　1.80**
+- Removing background
+  - Azure creates an **alpha matte**
+## Classify images: AI Custom Vision
+- Build your own models!!!
+- 2 tasks involved
+  1. Use existing labeled images to train
+  2. Create client app to submit img to be classified
+- You need 2 resources
+  1. Training resouce
+    - Either Cusom Vision resource (**training**) or multi-service resource
+  2. Prediction resource (request to the model)
+    - Either Cusom Vision resource (**prediction**) or multi-service resource
+### About image classification
+- Img classification is giving a **label** to an image
+  - Multiclass: model contains many classes, but each img can only have one label
+  - Multilabel: an img can have many labels
+### How to train model
+- Use REST, SDK, 0r Azure AI Custom Vision Portal
+## Object Detection
+- Model is trained to detect **one or more clasess** of objects in an img
+- Two components in a prediction
+  1. object class
+  2. bounding box
+- You need 2 resources
+  1. Training resouce
+    - Either Cusom Vision resource (**training**) or multi-service resource
+  2. Prediction resource (request to the model)
+    - Either Cusom Vision resource (**prediction**) or multi-service resource
+### Options for labeling images (for training)
+- In the Custom Vision Portal, Azure suggests bounding boxes
+- **smart labeler**: after first training batch, it will suggest the labels for new training data
+- Labeling tools
+  - Azure Machine Learning Studio
+  - Microsoft Visual Object Tagging Tool (VOTT)
+- Specifieng bounding boxes numerically
+  - It need 4 params
+    1. Left
+    2. Top
+    3. Width
+    4. Height
+    - The units of measurements are **proportion** to the entire image
+
+## Faces
+- There are 2 service that have to do with faces
+  1. Azure AI Vision service
+    - detect people
+    - return bounding box
+  2. **Face** service
+    - face detection (bounding box)
+    - Facial feature analysis
+    - Face comparison and verification **!Limited Access Policy**
+    - Facal recognition **!Limited Access Policy**
+### Face detection
+- With such a request, you'll get:
+  - Bounding box
+  - Confidence score
+  ```json
+  {
+    "modelVersion": "2023-10-01",
+    "metadata": {
+      "width": 400,
+      "height": 600
+    },
+    "peopleResult": {
+      "values": [
+        {
+          "boundingBox": {
+            "x": 0,
+            "y": 56,
+            "w": 101,
+            "h": 189
+          },
+  ```
+- **!! Age and gender prediction have been removed**
+### Feautures of Face service
+1. Face detection: see section above
+2. Attribute Analysis
+  - Head pose
+  - glasses
+  - blur
+  - exposure
+  - noise
+  - occlusion
+  - accesories
+  - quality for recognition
+3. facial landmark location
+4. Face comparison: are two faces the same?
+5. Facial recognition: predict people in new images
+6. Facial liveness: real or deepfake?
+
+- Provisioning
+  - AI Face resource
+  - multi-service resource
+### comparing faces
+- When a face is capture, a GUID is generated for it. It lasts **24 hours**
+### Create a facial recognition service
+how to:
+1. Create person group
+2. Add person to group
+
+
+
+
+
+
+
+
+
+
+
