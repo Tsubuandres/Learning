@@ -1720,14 +1720,224 @@ Provision AI Vision Resource
 how to:
 1. Create person group
 2. Add person to group
+ 3. Add detected faces from multiple imgs for a person
+  - These are persisted faces, so they dont expire
+4. Train the model
 
+- Trained model is kept in the Face resource
+- Model can be used to
+  - Identify individuals in pics
+  - Verify identity of detected face
+  - Analyse new images to check faces that are similar
 
+### Extra info
+- Which of the following facial attributes can the Azure AI Vision service predict?
+  - →　<b><i>location</i></b>. <b><i>occlusion</i></b> is incorrect
 
+## AI Vision OCR
+### Compare AI Vision OCR with DocIntel
 
+|AI Vision OCR|DocIntel|
+|---|---|
+|general use. unstructured text. 少ないtext. text in images|少ないor多いtext. img or pdf|
+|result are synchronous from single API call| asynchronous. initial call returns and operation ID|
+|not focused on structure|uses context and sctructure of doc to understand|
+|other features than just ocr. like img classification and object detection|used to get info from doc|
+|eg. street sign, memos, signs|receipts, articles, invoices|
 
+### Read API
+- USES READ API
+- The API must be directed to `ImageAnalysis`
+- The visual feature is `READ`  
+  ```py
+  result = client.analyze(
+      image_url=<image_to_analyze>,
+      visual_features=[VisualFeatures.READ]
+  )
+  ```
+- OR  
+  ```
+  https://<endpoint>/computervision/imageanalysis:analyze?features=read&...
+  ```
+- Response structure:  
+  ```yml
+  blocks:
+    lines:
+      text:
+      bounding_poligon:
+      words:
+        text:
+        bounding_poligon:
+        confidence:
+  ```
+### Extra Info
+- You've scanned a letter into PDF format and need to extract the text it contains. What should you do?
+  - → <b><i>Document Intelligence</i></b>, because it is well suited for PDF. Image Analysis API is not well suited for pdf.
 
+## Azure AI Video Indexer
+### Features
+- Facial recognition: recognize individuals **!! Limited access**
+- OCR
+- Speech Transcription
+- Topics: key topics
+- Sentiment
+- Labels: key objects and key themes
+- Content moderation
+- Scene segmentation
+### Custom Insights
+Add the following capabilities by training a model.
+- People: add people you want to recognize in the video. Train the model for this
+- Language: train the model to recognize special terminology
+- Brands: train the model to recognize specific brands, companies, projects, products, etc.
+### Widgets
+- Video Indexer Portal widgets can be exported to your HTML, so that you can use them on your site.
+- You can share insights with this.
+### API
+- Needs, `location` and `accoundId`  
+- This is to get info about your account↓  
+  ```
+  https://api.videoindexer.ai/Auth/<location>/Accounts/<accountId>/AccessToken
+  ```
+- This is to GET a logo↓ Also needs an `access token`  
+  ```
+  https://api.videoindexer.ai/<location>/Accounts/<accountId>/Customization/CustomLogos/Logos/<logoId>?<accessToken>
+  ```
+- This is to GET videos in your account↓ Also needs an `access token`  
+  ```
+  https://api.videoindexer.ai/<location>/Accounts/<accountId>/Videos?<accessToken>
+  ```
+### ARM template
+- A video indexer resource can be created with <b><i>Azure Resource Manager</b></i> template.
+### Extra Info:
+- You can upload a video directly to Video Indexer. There is no need to put it in a blob container.
 
+# Structure of AI
+```yml
+Cognitive Services:
+  - Language:
+    - AI Language(Text Analytics):  #SERVICE
+      - Extract Information(NLU):
+      - Summarize Content:
+      - Classify Text(NLU):
+      - Question Answering:
+      - Conversational Language Understanding:
+      - Tranlsate Text:
+    - AI Translator:                #SERVICE
+      - Text Translation:
+      - Document Translation:
+      - Custom Translator:
+  - Speech:
+    - Speech:                       #SERVICE
+      - Text to Speech:
+      - Speech to Text:
+      - Speech Translation:
+  - Vision:
+    - AI Vision:                    #SERVICE
+      - OCR:
+      - Image Analysis:
+      - Video Analysis:
+    - Custom Vision:                #SERVICE
+    - Face:                         #SERVICE
+Applied AI Services:
+  - AI Search:                      #SERVICE
+  - AI Video Indexer:               #SERVICE
+  - AI Document Intelligence:       #SERVICE
+  - Bot Services:
+Generative AI:
+  - Open AI:                        #SERVICE
+ 
+```
+# Structure of AI
+```yml
+Cognitive Services:
+  - Language:
+    - AI Language(Text Analytics):  #SERVICE
+      - Extract Information(NLU):
+      - Summarize Content:
+      - Classify Text(NLU):
+      - Question Answering:
+      - Conversational Language Understanding:
+      - Tranlsate Text:
+    - AI Translator:                #SERVICE
+      - Text Translation:
+      - Document Translation:
+      - Custom Translator:
+  - Speech:
+    - Speech:                       #SERVICE
+      - Text to Speech:
+      - Speech to Text:
+      - Speech Translation:
+  - Vision:
+    - AI Vision:                    #SERVICE
+      - OCR:
+      - Image Analysis:
+      - Video Analysis:
+    - Custom Vision:                #SERVICE
+    - Face:                         #SERVICE
+Applied AI Services:
+  - AI Search:                      #SERVICE
+  - AI Video Indexer:               #SERVICE
+  - AI Document Intelligence:       #SERVICE
+  - Bot Services:
+Generative AI:
+  - Open AI:                        #SERVICE
+ 
+```
 
+# REST API
 
+- Cognitive Services:
+  - Language:
+    - AI Language: <b><i>SERVICE</i></b> (Text Analysis)  
+      - General Text Analysis:  
+      <code>POST {Endpoint}/<b><i>language</i></b>/:<b><i>analyze-text</i></b>?api-version=2024-11-01
+      </code>
+        - Works for:
+          - Extract Information NLU
+          - Summarize Content
+          - Sentiment Analysi
+          - Classify Text NLU:
+      - Question Answering:  
+      <code>$LANGUAGE_ENDPOINT.api.cognitive.microsoft.com/<b><i>language</i></b>/:<b><i>query-knowledgebases</i></b>?projectName={YOUR_PROJECT_NAME}&api-version=2021-10-01&deploymentName={DEPLOYMENT_NAME}'</code>
+        - Params: deployment and project
+      - Conversational Language Understanding:  
+      <code>POST {Endpoint}/language/authoring/<b></i>analyze-conversations</i></b>/projects/{projectName}/train/jobs/{jobId}/:cancel?api-version=2022-05-01</code>
+      - Tranlsate Text:  
+      <code>https://api.cognitive.<b><i>microsofttranslator</i></b>.com/translate?api-version=3.0</code>
+        - params: `to` and `api-version`
+    - AI Translator: <b><i>SERVICE</i></b>
+      - IT'S ACTUALLY the same as the one just above
+      - Works for:
+        - Text Translation:
+        - Document Translation:
+        - Custom Translator:
+  - Speech: <b><i>SERVICE</i></b>
+    - As you can see `speech_region` is an important param.
+    - Speech to Text:
+    <code>https://${SPEECH_REGION}<b><i>.stt.speech.</b></i>microsoft.com/<b><i>speech/recognition/conversation</i></b>/cognitiveservices/v1?language=en-US&format=detailed</code>
 
+    - Text to Speech:
+    <code>https://${SPEECH_REGION}.tts.speech.microsoft.com/cognitiveservices/v1</code>
+    - Speech Translation:
+      NO SUPPORT!
+  - Vision:
+    - AI Vision: <b><i>SERVICE</i></b>
+      - OCR:  
+      <code>https://westcentralus.api.cognitive.microsoft.com/vision/v3.2/<b><i>read</i></b>/analyze</code>
+      - Image Analysis:  
+      <code>{endpoint}/<b><i>computervision/imageanalysis:analyze</i></b>?features=caption,read&model-version=latest&language=en&api-version=2024-02-01</code>
+      - Video Analysis: (Let's forget about this one)
+    - Custom Vision: <b><i>SERVICE</i></b>  
+      <code>https://{endpoint}/customvision/v3.3/Training/projects?name={name}</code>
+        - the example is just for training. Por prediction, it's another thing ok?
+    - Face: <b><i>SERVICE</i></b>
+      <code>https://{resource endpoint}/face/v1.0/{action}</code>
+      - action: are you adding a person, a group, or what?
+- Applied AI Services:
+  - AI Search: <b><i>SERVICE</i></b>
+  - AI Video Indexer: <b><i>SERVICE</i></b>
+  - AI Document Intelligence: <b><i>SERVICE</i></b>
+  - Bot Services:
+- Generative AI:
+  - Open AI: <b><i>SERVICE</i></b>
 
